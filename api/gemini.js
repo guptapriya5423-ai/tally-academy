@@ -1,33 +1,21 @@
 /**
  * Tally Academy: secure Gemini proxy (Vercel Serverless Function)
  *
- * The Gemini API key lives ONLY in the Vercel environment variable GEMINI_API_KEY.
- * It is never sent to the browser, never logged, never stored in localStorage.
+ * GEMINI_API_KEY lives ONLY in the Vercel environment variable.
+ * Only a logged-in admin (Firebase ID token) can use this endpoint.
  *
- * Only a logged-in admin can use this endpoint: the browser sends its Firebase ID token
- * (Authorization: Bearer <token>) and the server verifies it with Firebase before calling Gemini.
- *
- * Environment variables (Vercel > Project > Settings > Environment Variables):
- *   GEMINI_API_KEY     (required)  your Google AI Studio key
- *   FIREBASE_API_KEY   (optional)  Firebase Web API key; defaults to the one already used by the site
- *   ALLOWED_ORIGINS    (optional)  extra comma separated site origins (e.g. https://www.mysite.com). Firebase Hosting
- *                                  domains tall-accademy.web.app / .firebaseapp.com are allowed by default.
- *   ADMIN_EMAILS       (optional)  comma separated allow-list of admin emails; empty = any Firebase user of this project
- *
- * Routes:
- *   GET  /api/gemini                      -> { configured: true|false }
- *   POST /api/gemini {action:"models"}    -> Google's model list
- *   POST /api/gemini {action:"generate", model, body:{contents, generationConfig?, systemInstruction?}}
+ * Env vars: GEMINI_API_KEY (required), FIREBASE_API_KEY (optional),
+ * ALLOWED_ORIGINS (optional, comma separated), ADMIN_EMAILS (optional, comma separated)
  */
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/";
-const DEFAULT_FB_KEY = "AIzaSyBPL2jkRtciPKfbdmNs86YVnjpPkwjYaew"; // public Firebase web key, same as in index.html
-const DEFAULT_ORIGINS = ["https://tall-accademy.web.app", "https://tall-accademy.firebaseapp.com"];
+const DEFAULT_FB_KEY = "AIzaSyBPL2jkRtciPKfbdmNs86YVnjpPkwjYaew";
+const DEFAULT_ORIGINS = ["https://tall-accademy.web.app", "https://tall-accademy.firebaseapp.com", "https://tally-academy-sylk.vercel.app"];
 const MODEL_RE = /^gemini-[a-z0-9.\-]{1,60}$/i;
-const MAX_BODY_BYTES = 4 * 1024 * 1024; // Vercel's request limit is 4.5 MB
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const UPSTREAM_TIMEOUT_MS = 55000;
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 
-const tokenCache = new Map(); // token -> expiry (ms)
+const tokenCache = new Map();
 
 function applyCors(req, res) {
   const origin = req.headers["origin"];
@@ -40,7 +28,7 @@ function applyCors(req, res) {
     res.setHeader("Access-Control-Max-Age", "86400");
     return true;
   }
-  return !origin; // same-origin / non-browser requests have no Origin header
+  return !origin;
 }
 
 function send(res, status, obj) {
